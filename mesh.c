@@ -391,7 +391,7 @@ static void LoadModel(Model *model, FILE *fp, u16 stride){
 
 	model->bb[0].scale = (Vec3){1,1,1};
 	model->bb[0].pos = (Vec3){0,0,0};
-	model->bb[0].rot = (Quat){0,0,0,1};
+	model->bb[0].rot = (Vec3){0,0,0};
 
     glBindBuffer(GL_ARRAY_BUFFER, model->vbo);
     glBufferData(GL_ARRAY_BUFFER, size, vboData, GL_STATIC_DRAW);
@@ -647,8 +647,10 @@ void Model_LoadCollisions(Model *model, const char *path){
     for (k = 0; k < model->numBB; k++){
         fread(&model->bb[k].cube, 1, sizeof(Cube), fp);
 		fread(&model->bb[k].pos, 1, sizeof(Vec3), fp);
-		fread(&model->bb[k].rot, 1, sizeof(Quat), fp);
-		fread(&model->bb[k].scale, 1, sizeof(Vec3), fp);
+        Quat rot;
+		fread(&rot, 1, sizeof(Quat), fp);
+		model->bb[k].rot = Math_QuatToEuler(rot);
+        fread(&model->bb[k].scale, 1, sizeof(Vec3), fp);
 	}
 
 

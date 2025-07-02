@@ -6,29 +6,46 @@
 #include "math.h"
 
 static float GetOverlap(float minA, float maxA, float minB, float maxB){
-	float left = maxA - minB;
-	float right = maxB - minA;
 
-	if (minA < minB)
-		if (left < 0)
-			return 0;
+    if(minA > maxB || minB > maxA)
+        return 0; 
 
-	if (maxB > maxA)
-		if(right > 0)
-			return 0;
+    double smallest = HUGE_VAL;
+    double max0min1 = maxA - minB;
+    double max1min0 = maxB - minA;
+    double min0max1 = minA - maxB;
 
+    if(minA < minB){
+        if(maxA < maxB)
+            smallest = maxA - minB;
+        else
+            if(maxA - minB < maxB - minA) 
+            	smallest = max0min1; 
+            else 
+	            smallest = -max1min0;
+    } else {
+        if(maxA > maxB)
+            smallest = min0max1;            
+        else
+            if(max0min1 < max1min0) 
+            	smallest = max0min1; 
+            else 
+	            smallest = -max1min0;
+    }
 
-	return left < right ? left : right;
+    return smallest;
  }
 
-static int CheckCollision(Vec3 *axes, Vec3 *pointsA, int nPointsA, Vec3 *pointsB, int nPointsB, float *minOverlap){
+static int CheckCollision(Vec3 *axes, Vec3 *pointsA, int nPointsA, Vec3 *pointsB, int nPointsB, 
+	float *minOverlap, Vec3 *minAxis){
 
+	*minOverlap = HUGE_VAL;
 	int k;
 	for(k = 0; k < 15; k++){
 
 		float minA = HUGE_VAL, maxA = -HUGE_VAL, minB = HUGE_VAL, maxB = -HUGE_VAL;
 
-		if(axes[k].x == 0 && axes[k].y == 0 && axes[k].z == 0 ) return 1;
+		if(axes[k].x == 0 && axes[k].y == 0 && axes[k].z == 0 ) return 0;
 
 		axes[k] = Math_Vec3Normalize(axes[k]);
 
@@ -48,21 +65,22 @@ static int CheckCollision(Vec3 *axes, Vec3 *pointsA, int nPointsA, Vec3 *pointsB
 				maxA = dot;
 		}
 
-		float overlap = fabs(GetOverlap(minA, maxA,minB,maxB));
-
-		if(overlap < *minOverlap){
-			*minOverlap = overlap;
+		float overlap = GetOverlap(minA, maxA,minB,maxB);
+		if(fabs(overlap) < *minOverlap){
+			*minOverlap = fabs(overlap);
+			if(overlap > 0)
+				*minAxis = axes[k];
+			else
+				*minAxis = (Vec3){-axes[k].x,-axes[k].y,-axes[k].z};
 		}
 
-		if(overlap <= 0) return 0;
+		if(overlap == 0) return 0;
 	}
 
 	return 1;
 }
 
-float SAT_Collision(Vec3 *pointsA, Vec3 *pointsB, Vec3 *axesA, Vec3 *axesB){
-
-	float minOverlap = HUGE_VAL;
+float SAT_Collision(Vec3 *pointsA, Vec3 *pointsB, Vec3 *axesA, Vec3 *axesB, float *overlap, Vec3 *axis){
 
 		Vec3 axes[] = {
 			axesA[0],
@@ -84,21 +102,17 @@ float SAT_Collision(Vec3 *pointsA, Vec3 *pointsB, Vec3 *axesA, Vec3 *axesB){
 			Math_Vec3Cross(axesA[2], axesB[2])
 		};
 
-		if(CheckCollision(axes, pointsA,8,pointsB, 8, &minOverlap))
+		if(CheckCollision(axes, pointsA,8,pointsB, 8, overlap, axis))
 			return 1;
 
-		else if (CheckCollision(axes, pointsB,8,pointsA, 8, &minOverlap))
-			return 1;
 
 		return 0;
 }
 
-int BoundingBox_SATCollision(BoundingBox *bb1, BoundingBox *bb2){
+int BoundingBox_SATCollision(BoundingBox *bb1, BoundingBox *bb2, float *overlap, Vec3 *axis){
 
 
-	return SAT_Collision(bb1->points, bb2->points, bb1->axes, bb2->axes);
-
-	return 0;
+	return SAT_Collision(bb1->points, bb2->points, bb1->axes, bb2->axes, overlap, axis);
 }
 
 void BoundingBox_Copy(BoundingBox *into, BoundingBox *bb){
@@ -197,7 +211,7 @@ BoundingBox BoundingBox_Create(Cube cube, Vec3 pos){
 	return bb;
 }
 
-void BoundingBox_Rotate(BoundingBox *bb, Quat rot){
+void BoundingBox_Rotate(BoundingBox *bb, Vec3 rot){
 	bb->rot = rot;
 	BoundingBox_UpdatePoints(bb);
 }
@@ -261,9 +275,13 @@ int BoundingBox_ResolveCollision(Object *obj1, BoundingBox *bb, Object *obj2, Bo
 		return ret;
 
 	if(BoundingBox_IsSAT(bb) || BoundingBox_IsSAT(bb2)){
-		if(!BoundingBox_SATCollision(bb, bb2)){
+		Vec3 axis;
+		float overlap = 0;
+		if(!BoundingBox_SATCollision(bb, bb2, &overlap, &axis)){
 			return ret;	
 		}
+		obj1->bb.pos = Math_Vec3AddVec3(obj1->bb.pos,Math_Vec3MultFloat(axis,-overlap));
+		obj1->ObjUpdate(obj1);
 	}
 	
 	if(obj1 && (obj1->storeLastCollisions || obj1->OnCollision)){
@@ -300,7 +318,7 @@ void BoundingBox_UpdatePoints(BoundingBox *bb){
     bb->points[7] = (Vec3){bb->cube.x+bb->cube.w, bb->cube.y, bb->cube.z};
 
     float rmatrix[16];
-    Math_MatrixFromQuat(bb->rot, rmatrix);
+    Math_RotateMatrix(rmatrix,bb->rot);
 
     bb->axes[0] = (Vec3){1,0,0};
     bb->axes[1] = (Vec3){0,1,0};
@@ -351,8 +369,6 @@ void BoundingBox_UpdatePoints(BoundingBox *bb){
 	bb->wsCube.w -= bb->wsCube.x;
     bb->wsCube.h -= bb->wsCube.y;
     bb->wsCube.d -= bb->wsCube.z;
-	printf("%f %f %f %f %f %f\n", bb->wsCube.x, bb->wsCube.y, bb->wsCube.z, 
-		bb->wsCube.w, bb->wsCube.h, bb->wsCube.d);
 	
 	if(bb->children){
 		for(k = 0; k < bb->numChildren; k++)
@@ -362,7 +378,7 @@ void BoundingBox_UpdatePoints(BoundingBox *bb){
 }
 
 int BoundingBox_IsSAT(BoundingBox *bb){
-	if(bb->rot.x == 0 && bb->rot.y == 0 && bb->rot.z == 0 && (bb->rot.w == 0 || bb->rot.w == 1)){
+	if(bb->rot.x == 0 && bb->rot.y == 0 && bb->rot.z == 0){
 		return 0;
 	}
 	return 1;

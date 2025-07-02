@@ -74,7 +74,7 @@ typedef struct {
 typedef struct {
 	Cube cube;
 	Vec3 pos;
-	Quat rot;
+	Vec3 rot;
 	Vec3 scale;
 } BoundingShape;
 

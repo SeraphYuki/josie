@@ -41,6 +41,9 @@ static void Update(){
         cubeAnims[0].into = 0;
 	}
 
+    cubeObj->bb.pos.y -= Window_GetDeltaTime() / 1000.0f;
+    if(cubeObj->bb.pos.y < 0.7)
+        cubeObj->bb.pos.y = 0.7;
 	Skeleton_Update(&cubeSkel, cubeAnims, 1);
 
 	Vec3 moveVec = {0,0,0};
@@ -58,9 +61,15 @@ static void Update(){
 
         moveVec = Math_Vec3MultFloat(moveVec, Window_GetDeltaTime() * moveSpeed);
 
-        position.x += moveVec.x;
-        position.z += moveVec.z;
+        // position.x += moveVec.x;
+        // position.z += moveVec.z;
+        cubeObj->bb.pos.x += moveVec.x;
+        cubeObj->bb.pos.z += moveVec.z;
     }
+    cubeObj->ObjUpdate(cubeObj);
+    World_UpdateObjectInOctree(cubeObj);
+    World_ResolveCollisions(cubeObj, &cubeObj->bb);
+
 }
 
 static void Event(SDL_Event ev){
@@ -127,7 +136,7 @@ static void DrawRigged(Object *obj){
 
     Shaders_UseProgram(SKELETAL_ANIMATION_SHADER);
    
-    Shaders_SetModelMatrix(obj->matrix);
+    Shaders_SetModelMatrix(obj->bb.matrix);
     Shaders_UpdateModelMatrix();
 
     // Skeleton_Update(&cubeSkel, cubeAnims, 1);
@@ -135,8 +144,6 @@ static void DrawRigged(Object *obj){
     
     glUniform4fv(Shaders_GetBonesLocation(), cubeSkel.nBones * 3, &cubeSkel.matrices[0].x);
 
-    Shaders_SetModelMatrix(obj->matrix);
-    Shaders_UpdateModelMatrix();
 
     glActiveTexture(GL_TEXTURE0);
     
@@ -160,16 +167,11 @@ static void DrawRigged(Object *obj){
 }
 static void DrawModel(Object *obj){
 
-    int currProgram = Shaders_GetProgram(TEXTURED_SHADER);
-
-    Shaders_SetModelMatrix(obj->matrix);
-    Shaders_UpdateModelMatrix();
-    
     Shaders_UseProgram(TEXTURED_SHADER);
 
-    Shaders_SetModelMatrix(obj->matrix);
+    Shaders_SetModelMatrix(obj->bb.matrix);
     Shaders_UpdateModelMatrix();
-
+    
     glActiveTexture(GL_TEXTURE0);
 
     glBindVertexArray(obj->model->vao);
@@ -263,9 +265,9 @@ static char Draw(){
         glLineWidth(3);
 
 
-        if(SAT_Collision(cubeSkel.bones[k].points, points, cubeSkel.bones[k].axes, axes) > 0){
-            World_DrawLines(lines, 18);
-        }
+        // if(SAT_Collision(cubeSkel.bones[k].points, points, cubeSkel.bones[k].axes, axes) > 0){
+        //     World_DrawLines(lines, 18);
+        // }
     }
 	lines[0] = (Vec3){points[0].x, points[0].y, points[0].z};
 	lines[1] = (Vec3){points[1].x, points[1].y, points[1].z};
@@ -294,16 +296,6 @@ static void OnResize(){
 
 }
 //
-static void SetObjectsPos(Object *obj, Vec3 pos, Vec3 rotation){
-
-    obj->SetPosition(obj, pos);
-    obj->Rotate(obj, rotation);
-    obj->UpdateMatrix(obj);
-
-    obj->AddUser(obj);
-    World_UpdateObjectInOctree(obj);
-    obj->RemoveUser(obj);
-}
 
 
 int main(int argc, char **argv){
@@ -352,6 +344,7 @@ int main(int argc, char **argv){
 	Object_SetModel(cubeObj, &cubeModel);
     cubeObj->Draw = DrawRigged;
     cubeObj->AddUser(cubeObj);
+    cubeObj->bb.pos.y = 2;
     World_UpdateObjectInOctree(cubeObj);
 
 	groundObj = Object_Create();

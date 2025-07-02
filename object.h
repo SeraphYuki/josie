@@ -25,10 +25,7 @@ struct Object {
 	void (*OnCollision)(Object *this, Object *obj2, BoundingBox *bb1, BoundingBox *bb2);
 	void (*Update)(Object *this);
 	void (*Draw)(Object *this);
-	void (*SetPosition)(Object *this, Vec3 pos);
-	void (*Rotate)(Object *this, Vec3 rot);
-	void (*Scale)(Object *this, Vec3 scale);
-	void (*UpdateMatrix)(Object *this);
+	void (*ObjUpdate)(Object *this);
 	Object *(*Copy)(Object *this);
 
 	Model *model;
@@ -39,10 +36,6 @@ struct Object {
 	float transMatrix[16];
 	float scaleMatrix[16];
 
-	Vec3 scale;
-	Vec4 rotation;
-	Vec3 pos;
-	
 	u8 occluder;
 	u8 transparent;
 	Skeleton *skeleton;
